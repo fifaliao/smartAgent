@@ -1,0 +1,9 @@
+{
+  "name": "init-agent",
+  "version": "1.0.0",
+  "description": "Role-based agent initialization for OpenCode",
+  "main": "agent.js",
+  "dependencies": {
+    "js-yaml": "^4.1.0"
+  }
+}
