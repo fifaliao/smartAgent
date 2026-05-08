@@ -4,50 +4,53 @@
 
 ## 快速安装
 
-### npm 安装（推荐）
+### 一键安装（推荐）
 
 ```bash
-# 安装到当前项目
-npx opencode-init-agent install
-
-# 指定安装目录
-npx opencode-init-agent install /path/to/your-project
+curl -fsSL https://raw.githubusercontent.com/fifaliao/smartAgent/main/.opencode/skills/init-agent/install.sh | bash
 ```
 
-### Git 克隆
+### 或指定目录
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/fifaliao/smartAgent/main/.opencode/skills/init-agent/install.sh | bash /path/to/your-project
+```
+
+## 手动安装
+
+### 方式一：Git 克隆
 
 ```bash
 git clone https://github.com/fifaliao/smartAgent.git
 cd smartAgent
-npm install
-npm run install-skill -- /path/to/your-project
+mkdir -p .opencode/skills/init-agent/roles
+cp -r .opencode/skills/init-agent/* /path/to/your-project/.opencode/skills/init-agent/
+```
+
+### 方式二：手动下载
+
+```bash
+mkdir -p .opencode/skills/init-agent/roles
+# 下载所需文件到对应目录
 ```
 
 ## 使用方法
 
 ```bash
-# 列出所有角色
-npx opencode-init-agent --list
+# 进入安装目录
+cd .opencode/skills/init-agent
 
-# 加载角色到 OpenCode
-npx opencode-init-agent --role sisyphus
+# 列出所有角色
+node agent.js --list
+
+# 加载角色
+node agent.js --role sisyphus
 
 # 显示角色定义
-npx opencode-init-agent --show sisyphus
+node agent.js --show sisyphus
 
 # 创建新角色
-npx opencode-init-agent --new myrole
-```
-
-### OpenCode 内使用
-
-安装后，在 OpenCode 中直接使用：
-
-```
-/init-agent --list                    # 列出所有角色
-/init-agent --role sisyphus          # 加载角色
-/init-agent --show sisyphus           # 显示角色定义
-/init-agent --new myrole              # 创建新角色
+node agent.js --new myrole
 ```
 
 ## 预置角色
