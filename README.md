@@ -89,4 +89,4 @@ curl -fsSL https://raw.githubusercontent.com/fifaliao/smartAgent/main/.opencode/
 
 ## License
 
-MIT
+[MIT License](https://opensource.org/licenses/MIT)
