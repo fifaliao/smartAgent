@@ -2,6 +2,20 @@
 
 基于顶级 AI 产品（GPT-5、Claude Code、Grok 等）的 System Prompt 设计最佳实践，定义可复用的 Agent 角色。
 
+## OpenCode 终端使用
+
+在 OpenCode 终端中直接使用 `/init-agent` 命令：
+
+```bash
+/init-agent --list                    # 列出所有角色
+/init-agent --role sisyphus           # 加载 sisyphus 角色
+/init-agent --role developer          # 加载 developer 角色
+/init-agent --role reviewer           # 加载 reviewer 角色
+/init-agent --role collaborator      # 加载 collaborator 角色
+/init-agent --show sisyphus           # 显示角色定义详情
+/init-agent --new myrole             # 从模板创建新角色
+```
+
 ## 快速安装
 
 ### 一键安装（推荐）
@@ -10,47 +24,17 @@
 curl -fsSL https://raw.githubusercontent.com/fifaliao/smartAgent/main/.opencode/skills/init-agent/install.sh | bash
 ```
 
-### 或指定目录
+### 指定安装目录
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/fifaliao/smartAgent/main/.opencode/skills/init-agent/install.sh | bash /path/to/your-project
 ```
 
-## 手动安装
-
-### 方式一：Git 克隆
+### Git 克隆
 
 ```bash
 git clone https://github.com/fifaliao/smartAgent.git
 cd smartAgent
-mkdir -p .opencode/skills/init-agent/roles
-cp -r .opencode/skills/init-agent/* /path/to/your-project/.opencode/skills/init-agent/
-```
-
-### 方式二：手动下载
-
-```bash
-mkdir -p .opencode/skills/init-agent/roles
-# 下载所需文件到对应目录
-```
-
-## 使用方法
-
-```bash
-# 进入安装目录
-cd .opencode/skills/init-agent
-
-# 列出所有角色
-node agent.js --list
-
-# 加载角色
-node agent.js --role sisyphus
-
-# 显示角色定义
-node agent.js --show sisyphus
-
-# 创建新角色
-node agent.js --new myrole
 ```
 
 ## 预置角色
