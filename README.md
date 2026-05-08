@@ -2,66 +2,55 @@
 
 基于顶级 AI 产品（GPT-5、Claude Code、Grok 等）的 System Prompt 设计最佳实践，定义可复用的 Agent 角色。
 
-## 安装使用
+## 快速安装
 
-### 方式一：复制到项目
-
-```bash
-# 在你的 OpenCode 项目中创建技能目录
-mkdir -p .opencode/skills/init-agent/roles
-
-# 克隆仓库
-git clone https://github.com/fifaliao/smartAgent.git
-# 复制文件到你的项目
-cp -r smartAgent/.opencode/skills/init-agent/* .opencode/skills/init-agent/
-```
-
-### 方式二：创建角色文件
-
-在你的 OpenCode 项目中创建角色文件 `.opencode/skills/init-agent/roles/myrole.yaml`，然后通过 `/init-agent --role myrole` 调用。
-
-### 方式三：链接到本地仓库
+### npm 安装（推荐）
 
 ```bash
-# 克隆仓库
+# 安装到当前项目
+npx opencode-init-agent install
+
+# 指定安装目录
+npx opencode-init-agent install /path/to/your-project
+```
+
+### Git 克隆
+
+```bash
 git clone https://github.com/fifaliao/smartAgent.git
-
-# 通过软链接
-ln -s /path/to/smartAgent/.opencode/skills/init-agent /path/to/your-project/.opencode/skills/init-agent
-```
-
-## 特性
-
-- **人格隔离**: 工作输出不受角色性格影响
-- **权限分级**: automatic / requires_confirmation / requires_escalation
-- **安全硬限制**: 不可逾越的规则
-- **多智能体协作**: 定义委托关系
-
-## 目录结构
-
-```
-.opencode/skills/init-agent/
-├── SKILL.md              # 技能文档
-├── agent.js              # 命令行工具
-├── package.json
-└── roles/
-    ├── sisyphus.yaml     # 主角色
-    └── _templates/       # 角色模板
-        ├── developer.yaml
-        ├── reviewer.yaml
-        └── collaborator.yaml
+cd smartAgent
+npm install
+npm run install-skill -- /path/to/your-project
 ```
 
 ## 使用方法
 
 ```bash
+# 列出所有角色
+npx opencode-init-agent --list
+
+# 加载角色到 OpenCode
+npx opencode-init-agent --role sisyphus
+
+# 显示角色定义
+npx opencode-init-agent --show sisyphus
+
+# 创建新角色
+npx opencode-init-agent --new myrole
+```
+
+### OpenCode 内使用
+
+安装后，在 OpenCode 中直接使用：
+
+```
 /init-agent --list                    # 列出所有角色
 /init-agent --role sisyphus          # 加载角色
 /init-agent --show sisyphus           # 显示角色定义
 /init-agent --new myrole              # 创建新角色
 ```
 
-### 预置角色
+## 预置角色
 
 | 角色 | 描述 |
 |------|------|
@@ -69,6 +58,13 @@ ln -s /path/to/smartAgent/.opencode/skills/init-agent /path/to/your-project/.ope
 | `developer` | 开发者 - 专注于编写清晰、可维护的代码 |
 | `reviewer` | 审阅者 - 安全优先的代码审查 |
 | `collaborator` | 协作者 - 结对编程伙伴 |
+
+## 特性
+
+- **人格隔离**: 工作输出不受角色性格影响
+- **权限分级**: automatic / requires_confirmation / requires_escalation
+- **安全硬限制**: 不可逾越的规则
+- **多智能体协作**: 定义委托关系
 
 ## 设计原则
 
@@ -78,47 +74,6 @@ ln -s /path/to/smartAgent/.opencode/skills/init-agent /path/to/your-project/.ope
 2. **Permission Levels** - 基于操作影响的权限分级
 3. **Safety Hard Limits** - 安全边界
 4. **Multi-Agent Collaboration** - 多智能体协作模式
-
-## 创建自定义角色
-
-```yaml
-# .opencode/skills/init-agent/roles/myrole.yaml
-name: myrole
-title: My Custom Role
-
-description: 角色描述
-
-personality:
-  traits:
-    - trait: 特点1
-      intensity: high
-  tone: 专业、直接
-
-behavior:
-  do:
-    - rule: 遵循的规则
-  dont:
-    - rule: 避免的规则
-
-capabilities:
-  can:
-    - capability: 能做的事情
-  cannot:
-    - capability: 不能做的事情
-      fallback: 替代方案
-
-safety:
-  hard_limits:
-    - limit: 硬性限制
-  permission_levels:
-    automatic:
-      - 自动执行的操作
-    requires_confirmation:
-      - 需要确认的操作
-
-output_rules:
-  personality_isolation: true
-```
 
 ## License
 
