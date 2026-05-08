@@ -59,7 +59,23 @@ permission_levels:
 /init-agent --role developer          # 加载开发者角色
 /init-agent --role reviewer           # 加载审阅者角色
 /init-agent --show sisyphus           # 查看角色定义
+/init-agent --new myrole              # 创建新角色
+/init-agent --new myrole --desc "描述"  # 带描述创建
+/init-agent --new myrole --interactive # 交互式创建
 ```
+
+### 创建角色智能识别
+
+| 命令 | 行为 |
+|------|------|
+| `/init-agent --new backend-dev` | 名称清晰，直接创建 |
+| `/init-agent --new myrole --desc "A custom role"` | 指定描述创建 |
+| `/init-agent --new myrole --interactive` | 交互式确认细节 |
+
+**智能识别规则：**
+- `developer` / `backend` / `frontend` → 自动推断能力
+- `reviewer` / `security` → 安全相关能力
+- 不明确的名称 → 引导确认
 
 ## 快速安装
 
