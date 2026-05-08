@@ -1,38 +1,35 @@
-name: "Publish to npm"
+name: Publish to npm
 on:
   release:
-    types: [published]
+    types: published
   workflow_dispatch:
     inputs:
       version:
-        description: "Version (e.g., 1.0.0)"
+        description: Version to publish
         required: true
         default: "1.0.0"
 jobs:
   publish:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - name: Debug - list files
+        run: |
+          echo "=== Files ==="
+          find . -type f | head -50
+          echo ""
+          echo "=== Package.json ==="
+          cat package.json 2>/dev/null || echo "Not found"
+      - uses: actions/setup-node@v4
         with:
           node-version: "22"
-          registry-url: "https://registry.npmjs.org"
-      - name: Get package version
-        id: version
+          registry-url: https://registry.npmjs.org
+      - name: Publish
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
-          else
-            echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
-          fi
-      - name: Update package version
-        run: |
-          npm version ${{ steps.version.outputs.VERSION }} --no-git-tag-version
-      - name: Publish to npm
-        run: npm publish --access public
+          echo "=== Auth test ==="
+          npm whoami || echo "Not logged in"
+          echo ""
+          echo "=== Publishing ==="
+          npm publish --access public 2>&1
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
