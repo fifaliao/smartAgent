@@ -1,0 +1,410 @@
+#!/usr/bin/env node
+
+const fs = require('fs');
+const path = require('path');
+
+// ANSI colors
+const colors = {
+  reset: '\x1b[0m',
+  green: '\x1b[32m',
+  yellow: '\x1b[33m',
+  blue: '\x1b[34m',
+  cyan: '\x1b[36m',
+};
+
+const log = {
+  info: (msg) => console.log(`${colors.blue}[info]${colors.reset} ${msg}`),
+  success: (msg) => console.log(`${colors.green}[success]${colors.reset} ${msg}`),
+  warn: (msg) => console.log(`${colors.yellow}[warn]${colors.reset} ${msg}`),
+  step: (msg) => console.log(`${colors.cyan}[step]${colors.reset} ${msg}`),
+};
+
+const SKILL_DIR = path.resolve(__dirname, '..');
+const ROLES_DIR = path.join(SKILL_DIR, 'roles');
+
+function parseYaml(text) {
+  const result = {};
+  const stack = [{ obj: result, indent: -1 }];
+  let currentKey = null;
+
+  for (const line of text.split('\n')) {
+    const trimmed = line.trimEnd();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+
+    const indent = line.search(/\S/);
+    const match = trimmed.match(/^-\s+(.+)$/);
+
+    if (match) {
+      const parent = stack[stack.length - 1];
+      if (!Array.isArray(parent.obj[parent.key])) {
+        parent.obj[parent.key] = [];
+      }
+      const val = match[1];
+      const kvMatch = val.match(/^(.+?):\s*(.+)$/);
+      if (kvMatch) {
+        const item = {};
+        item[kvMatch[1]] = parseValue(kvMatch[2]);
+        parent.obj[parent.key].push(item);
+      } else {
+        parent.obj[parent.key].push(parseValue(val));
+      }
+      continue;
+    }
+
+    while (stack.length > 1 && stack[stack.length - 1].indent >= indent) {
+      stack.pop();
+    }
+
+    const kvMatch = trimmed.match(/^(.+?):\s*(.*)$/);
+    if (kvMatch) {
+      const key = kvMatch[1];
+      const val = kvMatch[2];
+      const parent = stack[stack.length - 1];
+      if (val === '') {
+        parent.obj[key] = {};
+        parent.key = key;
+        stack.push({ obj: parent.obj, key, indent });
+      } else {
+        parent.obj[key] = parseValue(val);
+        parent.key = key;
+      }
+    }
+  }
+  return result;
+}
+
+function parseValue(val) {
+  if (val === 'true') return true;
+  if (val === 'false') return false;
+  if (/^\d+$/.test(val)) return parseInt(val);
+  if (/^\d+\.\d+$/.test(val)) return parseFloat(val);
+  return val;
+}
+
+function listRoles() {
+  const roles = [];
+  if (!fs.existsSync(ROLES_DIR)) return roles;
+
+  const entries = fs.readdirSync(ROLES_DIR, { withFileTypes: true });
+  for (const entry of entries) {
+    if (entry.isFile() && entry.name.endsWith('.yaml')) {
+      const name = entry.name.replace('.yaml', '');
+      if (!name.startsWith('_')) {
+        roles.push(name);
+      }
+    }
+    if (entry.isDirectory() && entry.name !== '_templates') {
+      const subPath = path.join(ROLES_DIR, entry.name);
+      const files = fs.readdirSync(subPath);
+      for (const f of files) {
+        if (f.endsWith('.yaml')) {
+          roles.push(`${entry.name}/${f.replace('.yaml', '')}`);
+        }
+      }
+    }
+  }
+
+  const templatesPath = path.join(ROLES_DIR, '_templates');
+  if (fs.existsSync(templatesPath)) {
+    const templates = fs.readdirSync(templatesPath);
+    for (const f of templates) {
+      if (f.endsWith('.yaml')) {
+        roles.push(f.replace('.yaml', ''));
+      }
+    }
+  }
+
+  return roles;
+}
+
+function loadRole(name) {
+  let rolePath = path.join(ROLES_DIR, `${name}.yaml`);
+  if (fs.existsSync(rolePath)) {
+    const text = fs.readFileSync(rolePath, 'utf8');
+    return parseYaml(text);
+  }
+
+  const templatesPath = path.join(ROLES_DIR, '_templates');
+  const templatePath = path.join(templatesPath, `${name}.yaml`);
+  if (fs.existsSync(templatePath)) {
+    const text = fs.readFileSync(templatePath, 'utf8');
+    return parseYaml(text);
+  }
+
+  if (fs.existsSync(ROLES_DIR)) {
+    const entries = fs.readdirSync(ROLES_DIR, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.isDirectory() && entry.name !== '_templates') {
+        const fullPath = path.join(ROLES_DIR, entry.name, `${name}.yaml`);
+        if (fs.existsSync(fullPath)) {
+          const text = fs.readFileSync(fullPath, 'utf8');
+          return parseYaml(text);
+        }
+      }
+    }
+  }
+  return null;
+}
+
+function formatRoleAsPrompt(role) {
+  if (!role) return null;
+
+  let prompt = `# Role: ${role.title || role.name}\n\n`;
+  prompt += `${role.description || ''}\n\n`;
+
+  if (role.personality) {
+    prompt += `## Identity\n`;
+    if (role.personality.traits) {
+      prompt += `**Traits:** ${role.personality.traits.map(t => `${t.trait} (${t.intensity || 'medium'})`).join(', ')}\n`;
+    }
+    if (role.personality.tone) prompt += `**Tone:** ${role.personality.tone}\n`;
+    if (role.personality.speaking_style) prompt += `**Speaking Style:** ${role.personality.speaking_style}\n`;
+    if (role.personality.thinking_approach) prompt += `**Thinking Approach:**\n${role.personality.thinking_approach}\n`;
+    prompt += '\n';
+  }
+
+  if (role.behavior) {
+    prompt += `## Behavior Rules\n`;
+    if (role.behavior.do) {
+      prompt += `**Do:**\n`;
+      for (const d of role.behavior.do) {
+        prompt += `- ${d.rule}${d.reason ? ` (${d.reason})` : ''}\n`;
+      }
+    }
+    if (role.behavior.dont) {
+      prompt += `**Don't:**\n`;
+      for (const d of role.behavior.dont) {
+        prompt += `- ${d.rule}${d.reason ? ` (${d.reason})` : ''}\n`;
+      }
+    }
+    prompt += '\n';
+  }
+
+  if (role.capabilities) {
+    prompt += `## Capabilities\n`;
+    if (role.capabilities.can) {
+      prompt += `**Can:**\n`;
+      for (const c of role.capabilities.can) {
+        prompt += `- ${c.capability}${c.scope ? ` (${c.scope})` : ''}\n`;
+      }
+    }
+    if (role.capabilities.cannot) {
+      prompt += `**Cannot:**\n`;
+      for (const c of role.capabilities.cannot) {
+        prompt += `- ${c.capability}${c.fallback ? ` → ${c.fallback}` : ''}\n`;
+      }
+    }
+    prompt += '\n';
+  }
+
+  if (role.safety) {
+    prompt += `## Safety Policies\n`;
+    if (role.safety.hard_limits) {
+      prompt += `**Hard Limits:**\n`;
+      for (const h of role.safety.hard_limits) {
+        prompt += `- ${h.limit}${h.consequence ? ` (consequence: ${h.consequence})` : ''}\n`;
+      }
+    }
+    if (role.safety.permission_levels) {
+      prompt += `**Permission Levels:**\n`;
+      const pl = role.safety.permission_levels;
+      if (pl.automatic) prompt += `- **Automatic:** ${pl.automatic.join(', ')}\n`;
+      if (pl.requires_confirmation) prompt += `- **Requires Confirmation:** ${pl.requires_confirmation.join(', ')}\n`;
+      if (pl.requires_escalation) prompt += `- **Requires Escalation:** ${pl.requires_escalation.join(', ')}\n`;
+    }
+    prompt += '\n';
+  }
+
+  if (role.collaboration) {
+    prompt += `## Collaboration\n`;
+    if (role.collaboration.can_delegate_to) prompt += `**Can delegate to:** ${role.collaboration.can_delegate_to.join(', ')}\n`;
+    if (role.collaboration.escalation_path) prompt += `**Escalation path:** ${role.collaboration.escalation_path}\n`;
+    prompt += '\n';
+  }
+
+  if (role.output_rules) {
+    prompt += `## Output Rules\n`;
+    prompt += `**Personality Isolation:** ${role.output_rules.personality_isolation ? 'Enabled' : 'Disabled'}\n`;
+    if (role.output_rules.formal_output_tones) prompt += `**Formal tones:** ${role.output_rules.formal_output_tones.join(', ')}\n`;
+  }
+
+  return prompt;
+}
+
+// Install command: copy skills to target directory
+function install(targetDir) {
+  log.info(`Installing init-agent skill to ${targetDir}`);
+
+  const targetSkillsDir = path.join(targetDir, '.opencode', 'skills', 'init-agent');
+  const targetRolesDir = path.join(targetSkillsDir, 'roles');
+
+  // Create directories
+  if (!fs.existsSync(targetRolesDir)) {
+    fs.mkdirSync(targetRolesDir, { recursive: true });
+    log.success(`Created ${targetRolesDir}`);
+  }
+
+  // Copy skill files
+  const filesToCopy = ['SKILL.md', 'agent.js', 'package.json'];
+  for (const file of filesToCopy) {
+    const src = path.join(SKILL_DIR, file);
+    if (fs.existsSync(src)) {
+      fs.copyFileSync(src, path.join(targetSkillsDir, file));
+      log.success(`Copied ${file}`);
+    }
+  }
+
+  // Copy roles
+  if (fs.existsSync(ROLES_DIR)) {
+    const entries = fs.readdirSync(ROLES_DIR, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.isFile() && entry.name.endsWith('.yaml') && !entry.name.startsWith('_')) {
+        fs.copyFileSync(
+          path.join(ROLES_DIR, entry.name),
+          path.join(targetRolesDir, entry.name)
+        );
+        log.success(`Copied role: ${entry.name.replace('.yaml', '')}`);
+      }
+      if (entry.isDirectory()) {
+        const templatesSrc = path.join(ROLES_DIR, entry.name);
+        const templatesDst = path.join(targetRolesDir, entry.name);
+        fs.mkdirSync(templatesDst, { recursive: true });
+        const templates = fs.readdirSync(templatesSrc);
+        for (const t of templates) {
+          if (t.endsWith('.yaml')) {
+            fs.copyFileSync(
+              path.join(templatesSrc, t),
+              path.join(templatesDst, t)
+            );
+          }
+        }
+        log.success(`Copied templates from ${entry.name}`);
+      }
+    }
+  }
+
+  log.success(`\nInstallation complete!`);
+  log.info(`Available roles:`);
+  const roles = listRoles();
+  for (const r of roles) {
+    console.log(`  - ${r}`);
+  }
+  log.info(`\nUsage: /init-agent --role <name>`);
+}
+
+// Parse arguments
+const args = process.argv.slice(2);
+
+function showHelp() {
+  console.log(`init-agent - Role-based agent initialization for OpenCode
+
+${colors.green}Install:${colors.reset}
+  npx opencode-init-agent install [target-dir]
+    Install skill to target directory (default: current directory)
+
+${colors.green}Usage:${colors.reset}
+  npx opencode-init-agent --list                      List all available roles
+  npx opencode-init-agent --role <name>               Load and initialize with role
+  npx opencode-init-agent --show <name>               Display role definition
+  npx opencode-init-agent --new <name>                Create new role from template
+
+${colors.green}Examples:${colors.reset}
+  npx opencode-init-agent install                     Install to current directory
+  npx opencode-init-agent --list                       Show available roles
+  npx opencode-init-agent --role sisyphus              Initialize with sisyphus role
+  npx opencode-init-agent --role developer             Initialize with developer role
+  npx opencode-init-agent --show sisyphus              Show sisyphus role YAML
+  npx opencode-init-agent --new myrole                 Create new role from developer template`);
+}
+
+if (args.length === 0 || args[0] === '--help' || args[0] === '-h') {
+  showHelp();
+  process.exit(0);
+}
+
+const command = args[0];
+
+switch (command) {
+  case 'install': {
+    const targetDir = args[1] || process.cwd();
+    install(targetDir);
+    break;
+  }
+
+  case '--list':
+  case '-l': {
+    const roles = listRoles();
+    console.log('Available roles:');
+    for (const r of roles) {
+      console.log(`  - ${r}`);
+    }
+    break;
+  }
+
+  case '--role':
+  case '-r': {
+    const name = args[1];
+    if (!name) {
+      console.error('Error: Role name required');
+      console.error('Usage: npx opencode-init-agent --role <name>');
+      process.exit(1);
+    }
+    const role = loadRole(name);
+    if (!role) {
+      console.error(`Error: Role '${name}' not found`);
+      const roles = listRoles();
+      console.error('Available roles:', roles.join(', '));
+      process.exit(1);
+    }
+    console.log(formatRoleAsPrompt(role));
+    break;
+  }
+
+  case '--show': {
+    const name = args[1];
+    if (!name) {
+      console.error('Error: Role name required');
+      process.exit(1);
+    }
+    const role = loadRole(name);
+    if (!role) {
+      console.error(`Error: Role '${name}' not found`);
+      process.exit(1);
+    }
+    // Simple YAML dump
+    console.log(JSON.stringify(role, null, 2));
+    break;
+  }
+
+  case '--new': {
+    const name = args[1];
+    if (!name) {
+      console.error('Error: Role name required');
+      process.exit(1);
+    }
+    const newRolePath = path.join(ROLES_DIR, `${name}.yaml`);
+    if (fs.existsSync(newRolePath)) {
+      console.error(`Error: Role '${name}' already exists`);
+      process.exit(1);
+    }
+    const templatesDir = path.join(ROLES_DIR, '_templates');
+    const templatePath = path.join(templatesDir, 'developer.yaml');
+    if (fs.existsSync(templatePath)) {
+      let content = fs.readFileSync(templatePath, 'utf8');
+      content = content.replace(/^name:.*$/m, `name: ${name}`);
+      content = content.replace(/^title:.*$/m, `title: ${name.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}`);
+      fs.writeFileSync(newRolePath, content);
+      console.log(`Created role '${name}' from developer template`);
+    } else {
+      const minimal = `name: ${name}\ntitle: ${name}\ndescription: \n`;
+      fs.writeFileSync(newRolePath, minimal);
+      console.log(`Created minimal role '${name}'`);
+    }
+    break;
+  }
+
+  default:
+    console.error(`Unknown command: ${command}`);
+    showHelp();
+    process.exit(1);
+}
