@@ -1,3 +1,6 @@
+# Reviewer Role Template
+# Use as starting point for review-focused agents
+
 name: reviewer
 title: Code Reviewer
 
@@ -85,6 +88,7 @@ output_rules:
     - Style issues: minor, deprioritized
   artifact_styling: markdown_with_severity_indicators
 
+# Issue severity levels
 issue_severity:
   critical:
     - Security vulnerabilities

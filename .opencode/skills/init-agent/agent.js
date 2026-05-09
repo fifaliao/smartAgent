@@ -1,8 +1,23 @@
 #!/usr/bin/env node
 
+/**
+ * init-agent - Role-based agent initialization
+ *
+ * Usage:
+ *   /init-agent --list                      List all available roles
+ *   /init-agent --role <name>              Load and output role definition
+ *   /init-agent --show <name>              Display role without loading
+ *   /init-agent --new <name>               Create new role (interactive)
+ *   /init-agent --interactive              Create role interactively
+ *   /init-agent --agents                   List sub-agents for delegation
+ *   /init-agent --delegate <agent> <scenario>  Generate delegation prompt
+ *   /init-agent install [dir]              Install skill to directory
+ */
+
 const fs = require('fs');
 const path = require('path');
 const readline = require('readline');
+const yaml = require('js-yaml');
 
 // ANSI colors
 const colors = {
@@ -24,8 +39,13 @@ const log = {
 
 const SKILL_DIR = path.resolve(__dirname, '..');
 const ROLES_DIR = path.join(SKILL_DIR, 'roles');
+const PROMPTS_DIR = path.join(ROLES_DIR, '_prompts');
 
-// Interactive prompt helper
+const AVAILABLE_AGENTS = ['explore', 'librarian', 'oracle', 'visual-engineering', 'deep'];
+
+// ---------------------------------------------------------------------------
+// Utility: interactive prompt
+// ---------------------------------------------------------------------------
 function prompt(question) {
   const rl = readline.createInterface({
     input: process.stdin,
@@ -40,7 +60,204 @@ function prompt(question) {
   });
 }
 
-// Role name analysis - determines if the name is clear enough
+// ---------------------------------------------------------------------------
+// Role listing / loading / formatting
+// ---------------------------------------------------------------------------
+function listRoles() {
+  const roles = [];
+  const entries = fs.readdirSync(ROLES_DIR, { withFileTypes: true });
+
+  for (const entry of entries) {
+    if (entry.isFile() && entry.name.endsWith('.yaml')) {
+      const name = entry.name.replace('.yaml', '');
+      if (!name.startsWith('_')) {
+        roles.push(name);
+      }
+    }
+    if (entry.isDirectory()) {
+      const templatePath = path.join(ROLES_DIR, entry.name);
+      const files = fs.readdirSync(templatePath);
+      for (const f of files) {
+        if (f.endsWith('.yaml')) {
+          roles.push(`${entry.name}/${f.replace('.yaml', '')}`);
+        }
+      }
+    }
+  }
+
+  return roles;
+}
+
+function loadRole(name) {
+  // Try direct match
+  let rolePath = path.join(ROLES_DIR, `${name}.yaml`);
+  if (fs.existsSync(rolePath)) {
+    return yaml.load(fs.readFileSync(rolePath, 'utf8'));
+  }
+
+  // Try in subdirectories
+  const entries = fs.readdirSync(ROLES_DIR, { withFileTypes: true });
+  for (const entry of entries) {
+    if (entry.isDirectory()) {
+      const fullPath = path.join(ROLES_DIR, entry.name, `${name}.yaml`);
+      if (fs.existsSync(fullPath)) {
+        return yaml.load(fs.readFileSync(fullPath, 'utf8'));
+      }
+    }
+  }
+
+  return null;
+}
+
+function formatRoleAsPrompt(role) {
+  if (!role) return null;
+
+  let prompt = `# Role: ${role.title || role.name}\n\n`;
+  prompt += `${role.description || ''}\n\n`;
+
+  if (role.personality) {
+    prompt += `## Identity\n`;
+    if (role.personality.traits) {
+      prompt += `**Traits:** ${role.personality.traits.map(t => `${t.trait} (${t.intensity})`).join(', ')}\n`;
+    }
+    if (role.personality.tone) {
+      prompt += `**Tone:** ${role.personality.tone}\n`;
+    }
+    if (role.personality.speaking_style) {
+      prompt += `**Speaking Style:** ${role.personality.speaking_style}\n`;
+    }
+    if (role.personality.thinking_approach) {
+      prompt += `**Thinking Approach:**\n${role.personality.thinking_approach}\n`;
+    }
+    prompt += '\n';
+  }
+
+  if (role.behavior) {
+    prompt += `## Behavior Rules\n`;
+    if (role.behavior.do) {
+      prompt += `**Do:**\n`;
+      for (const d of role.behavior.do) {
+        prompt += `- ${d.rule}${d.reason ? ` (${d.reason})` : ''}\n`;
+      }
+    }
+    if (role.behavior.dont) {
+      prompt += `**Don't:**\n`;
+      for (const d of role.behavior.dont) {
+        prompt += `- ${d.rule}${d.reason ? ` (${d.reason})` : ''}\n`;
+      }
+    }
+    prompt += '\n';
+  }
+
+  if (role.capabilities) {
+    prompt += `## Capabilities\n`;
+    if (role.capabilities.can) {
+      prompt += `**Can:**\n`;
+      for (const c of role.capabilities.can) {
+        prompt += `- ${c.capability}${c.scope ? ` (${c.scope})` : ''}\n`;
+      }
+    }
+    if (role.capabilities.cannot) {
+      prompt += `**Cannot:**\n`;
+      for (const c of role.capabilities.cannot) {
+        prompt += `- ${c.capability}${c.fallback ? ` → ${c.fallback}` : ''}\n`;
+      }
+    }
+    prompt += '\n';
+  }
+
+  if (role.safety) {
+    prompt += `## Safety Policies\n`;
+    if (role.safety.hard_limits) {
+      prompt += `**Hard Limits:**\n`;
+      for (const h of role.safety.hard_limits) {
+        prompt += `- ${h.limit}${h.consequence ? ` (consequence: ${h.consequence})` : ''}\n`;
+      }
+    }
+    if (role.safety.permission_levels) {
+      prompt += `**Permission Levels:**\n`;
+      const pl = role.safety.permission_levels;
+      if (pl.automatic) {
+        prompt += `- **Automatic:** ${pl.automatic.join(', ')}\n`;
+      }
+      if (pl.requires_confirmation) {
+        prompt += `- **Requires Confirmation:** ${pl.requires_confirmation.join(', ')}\n`;
+      }
+      if (pl.requires_escalation) {
+        prompt += `- **Requires Escalation:** ${pl.requires_escalation.join(', ')}\n`;
+      }
+    }
+    prompt += '\n';
+  }
+
+  if (role.collaboration) {
+    prompt += `## Collaboration\n`;
+    if (role.collaboration.can_delegate_to) {
+      prompt += `**Can delegate to:** ${role.collaboration.can_delegate_to.join(', ')}\n`;
+    }
+    if (role.collaboration.escalation_path) {
+      prompt += `**Escalation path:** ${role.collaboration.escalation_path}\n`;
+    }
+    prompt += '\n';
+  }
+
+  if (role.output_rules) {
+    prompt += `## Output Rules\n`;
+    prompt += `**Personality Isolation:** ${role.output_rules.personality_isolation ? 'Enabled' : 'Disabled'}\n`;
+    if (role.output_rules.formal_output_tones) {
+      prompt += `**Formal tones:** ${role.output_rules.formal_output_tones.join(', ')}\n`;
+    }
+  }
+
+  return prompt;
+}
+
+// ---------------------------------------------------------------------------
+// Delegation prompt templates
+// ---------------------------------------------------------------------------
+function listAgents() {
+  return AVAILABLE_AGENTS;
+}
+
+function loadDelegationPromptTemplate(agentType) {
+  const templatePath = path.join(PROMPTS_DIR, `${agentType}.md`);
+  if (!fs.existsSync(templatePath)) {
+    return null;
+  }
+  return fs.readFileSync(templatePath, 'utf8');
+}
+
+function formatDelegationPrompt(agentType, scenario) {
+  const template = loadDelegationPromptTemplate(agentType);
+  if (!template) {
+    console.error(`Error: No prompt template found for agent type '${agentType}'`);
+    console.error(`Available agent types: ${AVAILABLE_AGENTS.join(', ')}`);
+    process.exit(1);
+  }
+
+  let prompt = template.replace(
+    /^TASK:\s*\[具体搜索目标\]\s*\n/im,
+    `TASK: ${scenario}\n`
+  );
+  prompt = prompt.replace(
+    /^TASK:\s*\[具体问题描述\]\s*\n/im,
+    `TASK: ${scenario}\n`
+  );
+  prompt = prompt.replace(
+    /^TASK:\s*\[具体功能描述\]\s*\n/im,
+    `TASK: ${scenario}\n`
+  );
+  prompt = prompt.replace(
+    /^TASK:\s*\[具体视觉任务\]\s*\n/im,
+    `TASK: ${scenario}\n`
+  );
+
+  return prompt;
+}
+
+// ---------------------------------------------------------------------------
+// Role name analysis (remote version)
+// ---------------------------------------------------------------------------
 function analyzeRoleName(name) {
   const analysis = {
     isClear: false,
@@ -51,11 +268,9 @@ function analyzeRoleName(name) {
     keywords: [],
   };
 
-  // Extract keywords from name
   const keywords = name.toLowerCase().split(/[-_]/);
   analysis.keywords = keywords;
 
-  // Known role patterns
   const patterns = {
     developer: {
       title: 'Software Developer',
@@ -119,7 +334,6 @@ function analyzeRoleName(name) {
     },
   };
 
-  // Check for pattern match
   for (const [pattern, config] of Object.entries(patterns)) {
     if (keywords.some((k) => k.includes(pattern))) {
       analysis.isClear = true;
@@ -131,7 +345,6 @@ function analyzeRoleName(name) {
     }
   }
 
-  // Default for unclear names
   if (!analysis.isClear) {
     analysis.suggestedTitle = name
       .split(/[-_]/)
@@ -142,7 +355,6 @@ function analyzeRoleName(name) {
   return analysis;
 }
 
-// Generate role YAML content
 function generateRoleYaml(name, options = {}) {
   const analysis = analyzeRoleName(name);
 
@@ -211,7 +423,6 @@ output_rules:
   return yaml;
 }
 
-// Interactive role creation
 async function createRoleInteractive(name, options = {}) {
   log.step(`Creating role: ${name}`);
 
@@ -221,15 +432,13 @@ async function createRoleInteractive(name, options = {}) {
     log.info(`Detected role type: ${analysis.suggestedTitle}`);
     log.success('Role definition looks clear. Creating directly...');
   } else {
-    log.warn('Role name is not clear enough. Let\'s clarify some details.');
+    log.warn("Role name is not clear enough. Let's clarify some details.");
 
-    // Ask for description
     if (!options.description) {
       const desc = await prompt('Description (optional, press Enter to skip): ');
       if (desc) options.description = desc;
     }
 
-    // Ask for title confirmation
     if (!options.title) {
       const titleConfirm = await prompt(
         `Title [${analysis.suggestedTitle}]: `
@@ -237,7 +446,6 @@ async function createRoleInteractive(name, options = {}) {
       if (titleConfirm) options.title = titleConfirm;
     }
 
-    // Ask for traits confirmation
     if (analysis.suggestedTraits.length > 0) {
       log.info(`Suggested traits: ${analysis.suggestedTraits.join(', ')}`);
       const traitsConfirm = await prompt(
@@ -248,7 +456,6 @@ async function createRoleInteractive(name, options = {}) {
       }
     }
 
-    // Ask for capabilities confirmation
     if (analysis.suggestedCapabilities.length > 0) {
       log.info(`Suggested capabilities: ${analysis.suggestedCapabilities.join(', ')}`);
       const capConfirm = await prompt(
@@ -260,18 +467,18 @@ async function createRoleInteractive(name, options = {}) {
     }
   }
 
-  // Generate YAML
-  const yaml = generateRoleYaml(name, options);
+  const yamlContent = generateRoleYaml(name, options);
 
-  // Write file
   const rolePath = path.join(ROLES_DIR, `${name}.yaml`);
-  fs.writeFileSync(rolePath, yaml);
+  fs.writeFileSync(rolePath, yamlContent);
 
   log.success(`Role '${name}' created at ${rolePath}`);
   return rolePath;
 }
 
+// ---------------------------------------------------------------------------
 // Install command
+// ---------------------------------------------------------------------------
 function install(targetDir) {
   log.info(`Installing init-agent skill to ${targetDir}`);
 
@@ -304,7 +511,7 @@ function install(targetDir) {
         fs.mkdirSync(templatesDst, { recursive: true });
         const templates = fs.readdirSync(path.join(ROLES_DIR, entry.name));
         for (const t of templates) {
-          if (t.endsWith('.yaml')) {
+          if (t.endsWith('.yaml') || t.endsWith('.md')) {
             fs.copyFileSync(
               path.join(ROLES_DIR, entry.name, t),
               path.join(templatesDst, t)
@@ -318,15 +525,20 @@ function install(targetDir) {
   log.success('Installation complete!');
 }
 
-// Help message
+// ---------------------------------------------------------------------------
+// Help
+// ---------------------------------------------------------------------------
 function showHelp() {
   console.log(`init-agent - Role-based agent initialization for OpenCode
 
 ${colors.green}Commands:${colors.reset}
-  init-agent --list                      List all available roles
+  init-agent --list                       List all available roles
   init-agent --role <name>                Load and initialize with role
   init-agent --show <name>                Display role definition
   init-agent --new <name> [--desc DESC] [--interactive]  Create new role
+  init-agent --interactive                Create role interactively
+  init-agent --agents                     List sub-agents for delegation
+  init-agent --delegate <agent> <scenario> Generate delegation prompt
   init-agent install [dir]                Install skill to directory
 
 ${colors.green}Examples:${colors.reset}
@@ -335,17 +547,20 @@ ${colors.green}Examples:${colors.reset}
   init-agent --new myrole                 Create role with clear name
   init-agent --new myrole --desc "A custom role for..."  Create with description
   init-agent --new myrole --interactive   Interactive creation with questions
+  init-agent --agents                     List available sub-agents
+  init-agent --delegate explore "搜索用户登录"  Generate delegation prompt
   init-agent install                       Install to current directory`);
 }
 
-// Parse arguments
-const args = process.argv.slice(2);
-
+// ---------------------------------------------------------------------------
+// Main
+// ---------------------------------------------------------------------------
 if (args.length === 0 || args[0] === '--help' || args[0] === '-h') {
   showHelp();
   process.exit(0);
 }
 
+const args = process.argv.slice(2);
 const command = args[0];
 
 switch (command) {
@@ -357,15 +572,7 @@ switch (command) {
 
   case '--list':
   case '-l': {
-    const roles = [];
-    if (fs.existsSync(ROLES_DIR)) {
-      const entries = fs.readdirSync(ROLES_DIR, { withFileTypes: true });
-      for (const entry of entries) {
-        if (entry.isFile() && entry.name.endsWith('.yaml') && !entry.name.startsWith('_')) {
-          roles.push(entry.name.replace('.yaml', ''));
-        }
-      }
-    }
+    const roles = listRoles();
     console.log('Available roles:');
     for (const r of roles) {
       console.log(`  - ${r}`);
@@ -380,8 +587,17 @@ switch (command) {
       console.error('Error: Role name required');
       process.exit(1);
     }
-    console.log(`Loading role: ${name}...`);
-    console.log('(Use /init-agent --show ' + name + ' to see full definition)');
+
+    const role = loadRole(name);
+    if (!role) {
+      console.error(`Error: Role '${name}' not found`);
+      const roles = listRoles();
+      console.error('Available roles:', roles.join(', '));
+      process.exit(1);
+    }
+
+    const prompt = formatRoleAsPrompt(role);
+    console.log(prompt);
     break;
   }
 
@@ -391,13 +607,14 @@ switch (command) {
       console.error('Error: Role name required');
       process.exit(1);
     }
-    const rolePath = path.join(ROLES_DIR, `${name}.yaml`);
-    if (fs.existsSync(rolePath)) {
-      console.log(fs.readFileSync(rolePath, 'utf8'));
-    } else {
+
+    const role = loadRole(name);
+    if (!role) {
       console.error(`Error: Role '${name}' not found`);
       process.exit(1);
     }
+
+    console.log(yaml.dump(role, { indent: 2, lineWidth: 120 }));
     break;
   }
 
@@ -413,7 +630,6 @@ switch (command) {
       interactive: false,
     };
 
-    // Parse options
     for (let i = 2; i < args.length; i++) {
       if (args[i] === '--desc' && args[i + 1]) {
         options.description = args[i + 1];
@@ -423,14 +639,12 @@ switch (command) {
       }
     }
 
-    // Check if role already exists
     const rolePath = path.join(ROLES_DIR, `${name}.yaml`);
     if (fs.existsSync(rolePath)) {
       log.warn(`Role '${name}' already exists. Use --show to view or delete first.`);
       process.exit(1);
     }
 
-    // Create role
     createRoleInteractive(name, options).catch((err) => {
       console.error('Error:', err.message);
       process.exit(1);
@@ -440,21 +654,56 @@ switch (command) {
 
   case '--interactive':
   case '-i': {
-    const name = await prompt('Role name: ');
-    if (!name) {
-      console.error('Error: Role name required');
-      process.exit(1);
-    }
+    (async () => {
+      const name = await prompt('Role name: ');
+      if (!name) {
+        console.error('Error: Role name required');
+        process.exit(1);
+      }
 
-    const options = {
-      description: await prompt('Description: '),
-      interactive: true,
-    };
+      const options = {
+        description: await prompt('Description: '),
+        interactive: true,
+      };
 
-    createRoleInteractive(name, options).catch((err) => {
+      await createRoleInteractive(name, options);
+    })().catch((err) => {
       console.error('Error:', err.message);
       process.exit(1);
     });
+    break;
+  }
+
+  case '--agents':
+  case '-a': {
+    console.log('Available sub-agents for delegation:');
+    for (const agent of AVAILABLE_AGENTS) {
+      const templatePath = path.join(PROMPTS_DIR, `${agent}.md`);
+      const hasTemplate = fs.existsSync(templatePath);
+      console.log(`  - ${agent}${hasTemplate ? ' (prompt template available)' : ' (no template)'}`);
+    }
+    break;
+  }
+
+  case '--delegate': {
+    const agentType = args[1];
+    const scenario = args.slice(2).join(' ');
+
+    if (!agentType || !scenario) {
+      console.error('Error: Agent type and scenario required');
+      console.error('Usage: /init-agent --delegate <agent> <scenario>');
+      console.error(`Available agents: ${AVAILABLE_AGENTS.join(', ')}`);
+      process.exit(1);
+    }
+
+    if (!AVAILABLE_AGENTS.includes(agentType)) {
+      console.error(`Error: Unknown agent type '${agentType}'`);
+      console.error(`Available agents: ${AVAILABLE_AGENTS.join(', ')}`);
+      process.exit(1);
+    }
+
+    const prompt = formatDelegationPrompt(agentType, scenario);
+    console.log(prompt);
     break;
   }
 
