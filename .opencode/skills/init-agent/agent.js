@@ -37,7 +37,7 @@ const log = {
   prompt: (msg) => console.log(`${colors.magenta}[prompt]${colors.reset} ${msg}`),
 };
 
-const SKILL_DIR = path.resolve(__dirname, '..');
+const SKILL_DIR = __dirname;
 const ROLES_DIR = path.join(SKILL_DIR, 'roles');
 const PROMPTS_DIR = path.join(ROLES_DIR, '_prompts');
 
@@ -555,12 +555,12 @@ ${colors.green}Examples:${colors.reset}
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
+const args = process.argv.slice(2);
+
 if (args.length === 0 || args[0] === '--help' || args[0] === '-h') {
   showHelp();
   process.exit(0);
 }
-
-const args = process.argv.slice(2);
 const command = args[0];
 
 switch (command) {
