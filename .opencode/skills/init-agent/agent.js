@@ -43,6 +43,17 @@ const PROMPTS_DIR = path.join(ROLES_DIR, '_prompts');
 
 const AVAILABLE_AGENTS = ['explore', 'librarian', 'oracle', 'visual-engineering', 'deep'];
 
+// Default category/type mappings for each subagent — used when a role
+// YAML doesn't define subagent_definitions. These are the known-good
+// assignments for the OpenCode task() API.
+const AGENT_DEFAULTS = {
+  explore:      { type: 'explore',                           description: 'Codebase pattern search and location using grep, ripgrep, and AST-grep' },
+  librarian:    { type: 'librarian',                         description: 'External documentation and open-source reference search via Context7 and GitHub' },
+  oracle:       { type: 'oracle', category: 'ultrabrain',    description: 'High-IQ reasoning for architecture decisions, hard debugging, and tradeoff analysis' },
+  'visual-engineering': { category: 'visual-engineering',   description: 'Frontend, UI/UX, design, styling, animation tasks' },
+  deep:         { category: 'deep',                          description: 'Goal-oriented autonomous problem-solving with thorough research before action' },
+};
+
 // ---------------------------------------------------------------------------
 // Utility: interactive prompt
 // ---------------------------------------------------------------------------
@@ -201,11 +212,29 @@ function formatRoleAsPrompt(role) {
     prompt += '\n';
   }
 
+  if (role.subagent_definitions) {
+    prompt += `## Subagent Definitions\n\n`;
+    prompt += `| Agent | Type / Category | Description |\n`;
+    prompt += `|-------|-----------------|-------------|\n`;
+    for (const [name, def] of Object.entries(role.subagent_definitions)) {
+      const typeOrCat = def.category || def.type || 'auto';
+      const desc = (def.description || '').replace(/\n/g, ' ');
+      prompt += `| ${name} | ${typeOrCat} | ${desc} |\n`;
+    }
+    prompt += '\n';
+  }
+
   if (role.output_rules) {
     prompt += `## Output Rules\n`;
     prompt += `**Personality Isolation:** ${role.output_rules.personality_isolation ? 'Enabled' : 'Disabled'}\n`;
     if (role.output_rules.formal_output_tones) {
-      prompt += `**Formal tones:** ${role.output_rules.formal_output_tones.join(', ')}\n`;
+      const tones = role.output_rules.formal_output_tones.map(t => {
+        if (typeof t === 'object') {
+          return Object.entries(t).map(([k, v]) => `${k}: ${v}`).join(', ');
+        }
+        return String(t);
+      }).join('; ');
+      prompt += `**Formal tones:** ${tones}\n`;
     }
   }
 
@@ -215,6 +244,61 @@ function formatRoleAsPrompt(role) {
 // ---------------------------------------------------------------------------
 // Delegation prompt templates
 // ---------------------------------------------------------------------------
+// Auto-generate subagent definitions from system state (AVAILABLE_AGENTS,
+// AGENT_DEFAULTS, and existence of prompt template files). This is the
+// self-evolution mechanism — the system defines itself from its own
+// capabilities, without depending on pre-written YAML.
+function generateSubagentDefinitions() {
+  const defs = {};
+  for (const agent of AVAILABLE_AGENTS) {
+    const defaults = AGENT_DEFAULTS[agent] || {};
+    const templatePath = path.join(PROMPTS_DIR, `${agent}.md`);
+    const hasTemplate = fs.existsSync(templatePath);
+    defs[agent] = {
+      type: defaults.type || null,
+      category: defaults.category || null,
+      description: defaults.description || `${agent} subagent`,
+      has_template: hasTemplate,
+    };
+    // Clean up null values so output stays tidy
+    if (!defs[agent].type) delete defs[agent].type;
+    if (!defs[agent].category) delete defs[agent].category;
+  }
+  return defs;
+}
+
+// Write auto-generated subagent definitions into a role YAML file.
+// Used by --update and automatically by install() after skill upgrade.
+function updateRoleYaml(name, rolesDir) {
+  const rolePath = path.join(rolesDir, `${name}.yaml`);
+  if (!fs.existsSync(rolePath)) {
+    log.warn(`Role '${name}' not found in ${rolesDir}, skipping`);
+    return false;
+  }
+  const text = fs.readFileSync(rolePath, 'utf8');
+  const role = yaml.load(text);
+  if (!role) {
+    log.warn(`Could not parse ${rolePath}, skipping`);
+    return false;
+  }
+  const autoDefs = generateSubagentDefinitions();
+  if (!role.subagent_definitions) {
+    role.subagent_definitions = {};
+  }
+  for (const [agent, def] of Object.entries(autoDefs)) {
+    if (!role.subagent_definitions[agent]) {
+      const cleanDef = {};
+      if (def.type) cleanDef.type = def.type;
+      if (def.category) cleanDef.category = def.category;
+      if (def.description) cleanDef.description = def.description;
+      role.subagent_definitions[agent] = cleanDef;
+    }
+  }
+  const yamlStr = yaml.dump(role, { indent: 2, lineWidth: 120, noRefs: true });
+  fs.writeFileSync(rolePath, yamlStr, 'utf8');
+  return true;
+}
+
 function listAgents() {
   return AVAILABLE_AGENTS;
 }
@@ -522,6 +606,14 @@ function install(targetDir) {
     }
   }
 
+  // Auto-update subagent definitions in the target role YAML.
+  // Ensures that after skill upgrade/install, subagent model configs
+  // stay in sync with the current system state.
+  const updated = updateRoleYaml('sisyphus', targetRolesDir);
+  if (updated) {
+    log.success('Auto-updated subagent definitions in sisyphus.yaml');
+  }
+
   log.success('Installation complete!');
 }
 
@@ -539,6 +631,8 @@ ${colors.green}Commands:${colors.reset}
   init-agent --interactive                Create role interactively
   init-agent --agents                     List sub-agents for delegation
   init-agent --delegate <agent> <scenario> Generate delegation prompt
+  init-agent --session [role]             Show session role snapshot with auto-generated model config
+  init-agent --update [role]              Persist auto-generated subagent definitions into YAML
   init-agent install [dir]                Install skill to directory
 
 ${colors.green}Examples:${colors.reset}
@@ -615,6 +709,64 @@ switch (command) {
     }
 
     console.log(yaml.dump(role, { indent: 2, lineWidth: 120 }));
+    break;
+  }
+
+  case '--session':
+  case '-s': {
+    const name = args[1] || 'sisyphus';
+    const role = loadRole(name);
+    const autoGenRole = role ? JSON.parse(JSON.stringify(role)) : { name, title: name, description: '' };
+    // Auto-generate subagent definitions from system state.
+    // If the role already has subagent_definitions, merge: YAML values
+    // override auto-generated ones, but auto-gen adds any missing agents
+    // (e.g. newly registered agents not yet in the YAML).
+    const autoDefs = generateSubagentDefinitions();
+    if (autoGenRole.subagent_definitions) {
+      for (const [agent, def] of Object.entries(autoDefs)) {
+        if (!autoGenRole.subagent_definitions[agent]) {
+          autoGenRole.subagent_definitions[agent] = def;
+        }
+      }
+    } else {
+      autoGenRole.subagent_definitions = autoDefs;
+    }
+    const sessionPrompt = formatRoleAsPrompt(autoGenRole);
+    console.log(sessionPrompt);
+    const agentCount = Object.keys(autoGenRole.subagent_definitions).length;
+    const templateCount = AVAILABLE_AGENTS.filter(a =>
+      fs.existsSync(path.join(PROMPTS_DIR, `${a}.md`))
+    ).length;
+    console.log('---');
+    console.log(`Session role: ${autoGenRole.title || autoGenRole.name}`);
+    console.log(`Subagents: ${agentCount} registered, ${templateCount} with prompt templates`);
+    break;
+  }
+
+  case '--update':
+  case '-u': {
+    const name = args[1] || 'sisyphus';
+    // Look up the role file (direct match or in subdirectories)
+    let rolesDir = ROLES_DIR;
+    let rolePath = path.join(ROLES_DIR, `${name}.yaml`);
+    if (!fs.existsSync(rolePath)) {
+      const entries = fs.readdirSync(ROLES_DIR, { withFileTypes: true });
+      for (const entry of entries) {
+        if (entry.isDirectory()) {
+          const subPath = path.join(ROLES_DIR, entry.name, `${name}.yaml`);
+          if (fs.existsSync(subPath)) {
+            rolesDir = path.join(ROLES_DIR, entry.name);
+            break;
+          }
+        }
+      }
+    }
+    if (updateRoleYaml(name, rolesDir)) {
+      log.success(`Updated subagent definitions for role '${name}'`);
+    } else {
+      console.error(`Error: Role '${name}' not found`);
+      process.exit(1);
+    }
     break;
   }
 
