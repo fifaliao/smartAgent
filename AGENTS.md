@@ -44,7 +44,7 @@ Both directories contain an `agent.js` CLI — they are **different files**:
 
 - **No tests, no linter, no formatter, no typecheck configs** — zero verification infra. Be careful not to break things.
 - **Two separate agent.js files** — editing the wrong one is a common mistake. Root `bin/init-agent` is the npm CLI wrapper; `.opencode/skills/init-agent/agent.js` is the full skill.
-- **Role schema** (YAML): `name`, `title`, `description`, `personality`, `behavior`, `capabilities`, `safety`, `memory`, `collaboration`, `subagent_definitions`, `output_rules`.
+- **Role schema** (YAML): `name`, `title`, `description`, `personality`, `behavior`, `capabilities`, `safety`, `memory`, `collaboration`, `requires` (skills + MCPs), `subagent_definitions`, `output_rules`.
 - **5 sub-agents** for delegation: `explore`, `librarian`, `oracle`, `visual-engineering`, `deep`. Each subagent can have `type` (direct agent) or `category` (task category) plus optional `model` and `description` in `subagent_definitions`.
 - **Integration concept**: `init-agent` = WHO (role definition), `superpowers` = HOW (workflow).
 
@@ -53,13 +53,14 @@ Both directories contain an `agent.js` CLI — they are **different files**:
 ```bash
 # Published npm package
 npx opencode-init-agent --list
-npx opencode-init-agent --role sisyphus
+npx opencode-init-agent --role sisyphus              # Auto-installs skills/MCPs + writes config
 npx opencode-init-agent --show developer
 npx opencode-init-agent --new myrole
 npx opencode-init-agent --agents
 npx opencode-init-agent --delegate explore "search login"
 npx opencode-init-agent --session [role]       # Show session snapshot with auto-generated subagent model config
 npx opencode-init-agent --update [role]        # Persist auto-generated definitions into role YAML (self-evolution)
+npx opencode-init-agent --install-deps [role]  # Install and configure skills/MCPs for role
 npx opencode-init-agent install [target-dir]
 ```
 
@@ -72,6 +73,26 @@ node .opencode/skills/init-agent/agent.js install
 # OR (if package.json has it configured)
 npm run install-skill
 ```
+
+## Role Dependencies & Agent Configuration
+
+Roles declare required skills and MCP servers via the `requires` field:
+
+```yaml
+requires:
+  skills:
+    core: [brainstorming, writing-plans]          # Always loaded
+    standard: [verification-before-completion]     # Most tasks
+    all: [systematic-debugging, tdd]               # Full workflow
+  mcp:
+    core:
+      - name: playwright
+        description: Browser automation
+```
+
+- `--role <name>` auto-installs dependencies and generates a `<name>.config.md` agent configuration file
+- `--install-deps [role]` lists all required skills/MCPs and generates config without loading the role
+- Tool layering (core/standard/all) follows claude-task-master's approach — load only what you need
 
 ## Self-evolution mechanism
 
