@@ -346,34 +346,36 @@ function getRequiredPlugins(role) {
   return [...new Set(plugins)];
 }
 
-// Try to install a plugin/tool. Works for common package managers.
-function installPlugin(name) {
-  if (!name || name === 'node' || name === 'git') {
-    // These are assumed present; skip.
-    return true;
-  }
-  const cmds = {
-    rtk:   'npm install -g rtk',
-    npm:   'npm install -g npm',
-    python3: 'which python3 || apt-get install -y python3',
-    curl:  'which curl || apt-get install -y curl',
-    docker: 'which docker || curl -fsSL https://get.docker.com | sh',
-  };
-  if (cmds[name]) {
-    try {
-      require('child_process').execSync(cmds[name], { stdio: 'pipe', timeout: 60000 });
-      return true;
-    } catch (e) {
-      return false;
-    }
-  }
-  // Generic fallback: try npm global install.
+// Check if a tool is already available on PATH.
+function isToolInstalled(name) {
   try {
-    require('child_process').execSync(`npm install -g ${name} 2>/dev/null`, { stdio: 'pipe', timeout: 60000 });
+    require('child_process').execSync(`which ${name} 2>/dev/null`, { stdio: 'pipe' });
     return true;
   } catch (e) {
     return false;
   }
+}
+
+// Try to install an npm-published plugin/tool. Returns:
+//   'installed' — already present or successfully installed
+//   'skipped'   — known tool that needs manual install (not an npm package)
+//   false       — install failed
+function installPlugin(name) {
+  if (!name || name === 'node' || name === 'git') return 'installed';
+  if (isToolInstalled(name)) return 'installed';
+  // npm-installable tools
+  if (name === 'rtk' || name === 'npm') {
+    try {
+      require('child_process').execSync(`npm install -g ${name}`, { stdio: 'pipe', timeout: 120000 });
+      return 'installed';
+    } catch (e) {
+      return false;
+    }
+  }
+  // Tools that require system package manager — skip with hint.
+  const systemTools = ['docker', 'python3', 'python', 'curl', 'wget', 'java', 'gcc', 'make'];
+  if (systemTools.includes(name)) return 'skipped';
+  return false;
 }
 
 // Collect all MCP names from role.requires.mcp across all tiers.
@@ -851,6 +853,21 @@ switch (command) {
       if (mcps.length) log.info(`MCP servers to configure (${mcps.length}): ${mcps.map(m => m.name || m).join(', ')}`);
       log.info('Use task(load_skills=[...]) to load these skills at runtime.');
 
+      const plugins = getRequiredPlugins(role);
+      if (plugins.length) {
+        log.info(`Plugins to install (${plugins.length}): ${plugins.join(', ')}`);
+        for (const plugin of plugins) {
+          const result = installPlugin(plugin);
+          if (result === 'installed') {
+            log.success(`  plugin: ${plugin} — installed`);
+          } else if (result === 'skipped') {
+            log.info(`  plugin: ${plugin} — manual install required (e.g. apt install ${plugin})`);
+          } else {
+            log.warn(`  plugin: ${plugin} — install failed (try manually: npm install -g ${plugin})`);
+          }
+        }
+      }
+
       const configBlock = generateAgentConfig(name, role);
       const configPath = path.join(ROLES_DIR, `${name}.config.md`);
       fs.writeFileSync(configPath, configBlock, 'utf8');
@@ -1037,6 +1054,7 @@ switch (command) {
     }
     const skills = getRequiredSkills(role);
     const mcps = getRequiredMcp(role);
+    const plugins = getRequiredPlugins(role);
     log.step(`Installing dependencies for role '${name}'...`);
     if (skills.length) {
       log.info(`Skills to load: ${skills.length}`);
@@ -1051,6 +1069,19 @@ switch (command) {
         log.success(`  mcp: ${mcpName}${m.description ? ` — ${m.description}` : ''}`);
       }
     } else log.info('No MCP server requirements found.');
+    if (plugins.length) {
+      log.info(`Plugins to install: ${plugins.length}`);
+      for (const plugin of plugins) {
+        const result = installPlugin(plugin);
+        if (result === 'installed') {
+          log.success(`  plugin: ${plugin} — installed`);
+        } else if (result === 'skipped') {
+          log.info(`  plugin: ${plugin} — manual install required (e.g. apt install ${plugin})`);
+        } else {
+          log.warn(`  plugin: ${plugin} — install failed (try manually: npm install -g ${plugin})`);
+        }
+      }
+    } else log.info('No plugin requirements found.');
     const configBlock = generateAgentConfig(name, role);
     console.log('\nGenerated agent configuration:\n');
     console.log(configBlock);

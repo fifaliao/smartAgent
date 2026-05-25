@@ -4,3 +4,5 @@ node_modules/
 *.log
 # Auto-generated agent configuration files
 *.config.md
+# Sisyphus planning artifacts
+.sisyphus/
