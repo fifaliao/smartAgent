@@ -212,6 +212,27 @@ function formatRoleAsPrompt(role) {
     prompt += '\n';
   }
 
+  if (role.requires) {
+    prompt += `## Required Dependencies\n`;
+    const { skills, mcp } = role.requires;
+    if (skills) {
+      prompt += `**Skills:**\n`;
+      if (skills.core) prompt += `- Core: ${skills.core.join(', ')}\n`;
+      if (skills.standard) prompt += `- Standard: ${skills.standard.join(', ')}\n`;
+      if (skills.all) prompt += `- All: ${skills.all.join(', ')}\n`;
+    }
+    if (mcp) {
+      prompt += `**MCP Servers:**\n`;
+      for (const tier of ['core', 'standard', 'all']) {
+        if (mcp[tier] && mcp[tier].length) {
+          const names = mcp[tier].map(m => m.name || m).join(', ');
+          prompt += `- ${tier.charAt(0).toUpperCase() + tier.slice(1)}: ${names}\n`;
+        }
+      }
+    }
+    prompt += '\n';
+  }
+
   if (role.subagent_definitions) {
     prompt += `## Subagent Definitions\n\n`;
     prompt += `| Agent | Type / Category | Description |\n`;
@@ -297,6 +318,78 @@ function updateRoleYaml(name, rolesDir) {
   const yamlStr = yaml.dump(role, { indent: 2, lineWidth: 120, noRefs: true });
   fs.writeFileSync(rolePath, yamlStr, 'utf8');
   return true;
+}
+
+// Collect all skill names from role.requires.skills across all tiers.
+function getRequiredSkills(role) {
+  const skills = [];
+  if (!role.requires || !role.requires.skills) return skills;
+  const tiers = ['core', 'standard', 'all'];
+  for (const tier of tiers) {
+    if (role.requires.skills[tier]) {
+      skills.push(...role.requires.skills[tier]);
+    }
+  }
+  return [...new Set(skills)];
+}
+
+// Collect all MCP names from role.requires.mcp across all tiers.
+function getRequiredMcp(role) {
+  const mcps = [];
+  if (!role.requires || !role.requires.mcp) return mcps;
+  const tiers = ['core', 'standard', 'all'];
+  for (const tier of tiers) {
+    if (role.requires.mcp[tier]) {
+      mcps.push(...role.requires.mcp[tier]);
+    }
+  }
+  return mcps;
+}
+
+// Format role dependency requirements for display.
+function formatRoleRequirements(role) {
+  const lines = [];
+  if (!role.requires) return '';
+  const { skills, mcp } = role.requires;
+  if (skills) {
+    lines.push('### Skills');
+    if (skills.core && skills.core.length) lines.push(`- **Core:** ${skills.core.join(', ')}`);
+    if (skills.standard && skills.standard.length) lines.push(`- **Standard:** ${skills.standard.join(', ')}`);
+    if (skills.all && skills.all.length) lines.push(`- **All:** ${skills.all.join(', ')}`);
+  }
+  if (mcp) {
+    lines.push('### MCP Servers');
+    for (const tier of ['core', 'standard', 'all']) {
+      if (mcp[tier] && mcp[tier].length) {
+        const names = mcp[tier].map(m => m.name || m).join(', ');
+        lines.push(`- **${tier.charAt(0).toUpperCase() + tier.slice(1)}:** ${names}`);
+      }
+    }
+  }
+  if (lines.length) lines.unshift('', '## Required Dependencies');
+  return lines.join('\n');
+}
+
+// Generate markdown configuration block for the agent prompt.
+// This is the output that feeds back into the agent's system prompt.
+function generateAgentConfig(roleName, role) {
+  let config = '';
+  config += `## Agent Configuration: ${roleName}\n\n`;
+  config += `**Role:** ${role.title || roleName}\n`;
+  if (role.description) config += `**Description:** ${role.description}\n`;
+  config += `**Subagents:** ${Object.keys(role.subagent_definitions || {}).length} configured\n`;
+  const skills = getRequiredSkills(role);
+  if (skills.length) {
+    config += `**Skills:** ${skills.join(', ')}\n`;
+    config += `**Skill load command:** task(load_skills=[${skills.map(s => `"${s}"`).join(', ')}], ...)\n`;
+  }
+  const mcps = getRequiredMcp(role);
+  if (mcps.length) {
+    const mcpNames = mcps.map(m => m.name || m).join(', ');
+    config += `**MCP Servers:** ${mcpNames}\n`;
+  }
+  config += '\n---\n';
+  return config;
 }
 
 function listAgents() {
@@ -633,6 +726,7 @@ ${colors.green}Commands:${colors.reset}
   init-agent --delegate <agent> <scenario> Generate delegation prompt
   init-agent --session [role]             Show session role snapshot with auto-generated model config
   init-agent --update [role]              Persist auto-generated subagent definitions into YAML
+  init-agent --install-deps [role]        Install and configure skills/MCPs for role
   init-agent install [dir]                Install skill to directory
 
 ${colors.green}Examples:${colors.reset}
@@ -692,6 +786,20 @@ switch (command) {
 
     const prompt = formatRoleAsPrompt(role);
     console.log(prompt);
+
+    if (role.requires) {
+      log.step(`Auto-installing dependencies for role '${name}'...`);
+      const skills = getRequiredSkills(role);
+      const mcps = getRequiredMcp(role);
+      if (skills.length) log.info(`Skills to load (${skills.length}): ${skills.join(', ')}`);
+      if (mcps.length) log.info(`MCP servers to configure (${mcps.length}): ${mcps.map(m => m.name || m).join(', ')}`);
+      log.info('Use task(load_skills=[...]) to load these skills at runtime.');
+
+      const configBlock = generateAgentConfig(name, role);
+      const configPath = path.join(ROLES_DIR, `${name}.config.md`);
+      fs.writeFileSync(configPath, configBlock, 'utf8');
+      log.success(`Agent configuration saved to ${configPath}`);
+    }
     break;
   }
 
@@ -737,9 +845,13 @@ switch (command) {
     const templateCount = AVAILABLE_AGENTS.filter(a =>
       fs.existsSync(path.join(PROMPTS_DIR, `${a}.md`))
     ).length;
+    const skills = getRequiredSkills(autoGenRole);
+    const mcps = getRequiredMcp(autoGenRole);
     console.log('---');
     console.log(`Session role: ${autoGenRole.title || autoGenRole.name}`);
     console.log(`Subagents: ${agentCount} registered, ${templateCount} with prompt templates`);
+    if (skills.length) console.log(`Skills: ${skills.length} required (${skills.join(', ')})`);
+    if (mcps.length) console.log(`MCP servers: ${mcps.length} required (${mcps.map(m => m.name || m).join(', ')})`);
     break;
   }
 
@@ -856,6 +968,39 @@ switch (command) {
 
     const prompt = formatDelegationPrompt(agentType, scenario);
     console.log(prompt);
+    break;
+  }
+
+  case '--install-deps':
+  case '-d': {
+    const name = args[1] || 'sisyphus';
+    const role = loadRole(name);
+    if (!role) {
+      console.error(`Error: Role '${name}' not found`);
+      process.exit(1);
+    }
+    const skills = getRequiredSkills(role);
+    const mcps = getRequiredMcp(role);
+    log.step(`Installing dependencies for role '${name}'...`);
+    if (skills.length) {
+      log.info(`Skills to load: ${skills.length}`);
+      for (const skill of skills) {
+        log.success(`  skill: ${skill} — use task(load_skills=["${skill}"], ...)`);
+      }
+    } else log.info('No skill requirements found.');
+    if (mcps.length) {
+      log.info(`MCP servers to configure: ${mcps.length}`);
+      for (const m of mcps) {
+        const mcpName = m.name || m;
+        log.success(`  mcp: ${mcpName}${m.description ? ` — ${m.description}` : ''}`);
+      }
+    } else log.info('No MCP server requirements found.');
+    const configBlock = generateAgentConfig(name, role);
+    console.log('\nGenerated agent configuration:\n');
+    console.log(configBlock);
+    const configPath = path.join(ROLES_DIR, `${name}.config.md`);
+    fs.writeFileSync(configPath, configBlock, 'utf8');
+    log.success(`Agent configuration saved to ${configPath}`);
     break;
   }
 
