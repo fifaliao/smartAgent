@@ -84,6 +84,28 @@ output_rules:
   personality_isolation: boolean  # Don't let personality affect work
   formal_output_tones: string[]
   artifact_styling: string
+
+# Required dependencies (auto-installed on --role)
+requires:
+  skills:                         # OpenCode skills to load
+    core: string[]                #   Always loaded
+    standard: string[]            #   Most tasks
+    all: string[]                 #   Full workflow
+  mcp:                            # MCP servers to configure
+    core: [{name, description}]   #   Always configured
+    standard: [{name, description}]
+    all: [{name, description}]
+  plugins:                        # CLI tools to install
+    core: string[]                #   Always installed
+    standard: string[]
+    all: string[]
+
+# Subagent model configurations (auto-generated or manual)
+subagent_definitions:
+  agent_name:                     # Matches can_delegate_to entries
+    type: string                  #   Agent type (explore, librarian, oracle)
+    category: string              #   OR task category (visual-engineering, deep)
+    description: string           #   When to delegate to this agent
 ```
 
 ## Usage
@@ -268,23 +290,62 @@ collaboration:
 | Command | Description |
 |---------|-------------|
 | `/init-agent --list` | List all available roles |
-| `/init-agent --role <name>` | Initialize with a specific role |
-| `/init-agent --show <name>` | Display role definition |
-| `/init-agent --edit <name>` | Edit an existing role |
-| `/init-agent --delete <name>` | Remove a role definition |
+| `/init-agent --role <name>` | Initialize with role (auto-installs deps, writes config) |
+| `/init-agent --show <name>` | Display role YAML definition |
+| `/init-agent --new <name>` | Create a new role (smart analysis) |
+| `/init-agent --new <name> --interactive` | Create a role interactively |
+| `/init-agent --install-deps <name>` | Install skills, MCPs, plugins for a role |
+| `/init-agent --session [role]` | Show session snapshot with auto-generated subagent configs |
+| `/init-agent --update [role]` | Persist auto-generated subagent definitions into YAML |
+| `/init-agent --agents` | List sub-agents available for delegation |
+| `/init-agent --delegate <agent> <scenario>` | Generate a delegation prompt |
+| `/init-agent install [dir]` | Install the skill into a target directory |
+
+### Plugin & Tool Layering
+
+The `requires` field in role YAML supports three tiers of dependencies:
+
+```yaml
+requires:
+  skills:                       # OpenCode skills
+    core: [brainstorming]       #   Always loaded
+    standard: [debugging]       #   Most tasks
+    all: [tdd]                  #   Full workflow
+  mcp:                          # MCP servers
+    core:
+      - name: playwright
+  plugins:                      # CLI tools
+    core: [rtk, node, git]
+    standard: [docker]
+    all: [python3, curl]
+```
+
+| Tier | Loaded When |
+|------|-------------|
+| **core** | Always — essential for the role |
+| **standard** | Most tasks — common but not universal |
+| **all** | Full workflow — specialized needs |
 
 ## File Structure
 
 ```
-.opencode/
+.opencode/skills/init-agent/
+├── SKILL.md                  # This file
+├── agent.js                  # CLI tool (full-featured, ~1100 lines)
+├── package.json              # Dependencies (js-yaml)
+├── install.sh                # curl/wget installer
 └── roles/
-    ├── _templates/           # Role templates
+    ├── sisyphus.yaml          # Built-in orchestrator role
+    ├── _templates/            # Role templates
     │   ├── developer.yaml
     │   ├── reviewer.yaml
     │   └── collaborator.yaml
-    ├── developer.yaml         # Your custom roles
-    ├── code-reviewer.yaml
-    └── security-researcher.yaml
+    └── _prompts/              # Delegation prompt templates
+        ├── explore.md
+        ├── librarian.md
+        ├── oracle.md
+        ├── visual-engineering.md
+        └── deep.md
 ```
 
 ## Tips

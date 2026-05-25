@@ -1,204 +1,286 @@
-# Agent Role Definition Skill
+<p align="center">
+  <img src="https://img.shields.io/badge/OpenCode-Skill-blue?style=flat-square" alt="OpenCode Skill">
+  <img src="https://img.shields.io/github/v/release/fifaliao/smartAgent?style=flat-square" alt="GitHub release">
+  <img src="https://img.shields.io/github/last-commit/fifaliao/smartAgent?style=flat-square" alt="Last commit">
+  <img src="https://img.shields.io/badge/node-%3E%3D14-green?style=flat-square" alt="Node >=14">
+</p>
 
-基于顶级 AI 产品（GPT-5、Claude Code、Grok 等）的 System Prompt 设计最佳实践，定义可复用的 Agent 角色。
+<h1 align="center">🧠 init-agent</h1>
+<p align="center"><strong>One command to initialize your AI assistant.</strong><br>
+Auto-install skills, MCP servers, and plugins — configured by role, ready in seconds.</p>
 
-## 特性
+<p align="center">
+  <i>让你的 AI 助手开箱即用。一条命令，加载角色、安装依赖、配置模型。</i>
+</p>
 
-- **人格隔离**: 工作输出不受角色性格影响
-- **权限分级**: automatic / requires_confirmation / requires_escalation
-- **安全硬限制**: 不可逾越的规则
-- **多智能体协作**: 定义委托关系
+---
 
-## 目录结构
+## 🎯 The Problem
 
-```
-.opencode/skills/init-agent/
-├── SKILL.md              # 技能文档
-├── agent.js              # 命令行工具
-├── package.json
-└── roles/
-    ├── _prompts/         # 子代理委托 prompt 模板
-    │   ├── explore.md
-    │   ├── librarian.md
-    │   ├── oracle.md
-    │   ├── visual-engineering.md
-    │   └── deep.md
-    ├── sisyphus.yaml     # 主角色
-    └── _templates/       # 角色模板
-        ├── developer.yaml
-        ├── reviewer.yaml
-        └── collaborator.yaml
-```
-
-## 使用方法
+Every time you start a new coding session with an AI, you repeat the same ritual:
 
 ```bash
-/init-agent --list                              # 列出所有角色
-/init-agent --role sisyphus                    # 加载角色
-/init-agent --show sisyphus                     # 显示角色定义
-/init-agent --new myrole                        # 创建新角色
-/init-agent --agents                            # 列出可委托的子代理
-/init-agent --delegate explore "搜索用户登录"   # 生成委托 prompt
+# Manual setup, every single time:
+# →  manually load skills
+# →  remember which MCP servers you need
+# →  hunt down the right prompt template
+# →  configure model settings
+# →  install the right plugins
 ```
 
-## 设计原则
+**Different tasks need different setups:**
+- Code review needs security analysis tools
+- Frontend work needs visual testing
+- Architecture planning needs deep reasoning
 
-参考文章: [4万Star开源神作曝光顶级AI们的System Prompt](https://mp.weixin.qq.com/s/jhWn2GROWbiqbhPhACuT-A)
+This is repetitive, error-prone, and wastes context.
 
-1. **Personality Isolation** - 人格与工作输出分离
-2. **Permission Levels** - 基于操作影响的权限分级
-3. **Safety Hard Limits** - 安全边界
-4. **Multi-Agent Collaboration** - 多智能体协作模式
-
-## 与 superpowers 集成
-
-`init-agent` 与 `superpowers` 配合使用，形成完整的 **WHO + HOW** 工作流。
-
-### 角色分工
-
-| 技能 | 解决的问题 | 关键词 |
-|------|-----------|--------|
-| **superpowers** | **HOW to work** — 流程规范 | brainstorm → plan → execute → verify |
-| **init-agent** | **WHO / WHAT** — 角色定义 | personality, capabilities, delegation |
-
-两者互补，不是替代关系。
-
-### 协作模式
-
-```
-用户: "实现一个用户登录功能"
-
-                    ┌─ brainstorming ─────────┐
-                    │  理解需求？确认约束？    │
-                    └────────────────────────┘
-                              │
-                              ▼
-              ┌─ writing-plans (superpowers) ─┐
-              │   分解为独立任务清单           │
-              └────────────────────────────────┘
-                              │
-          ┌───────────────────┼───────────────────┐
-          ▼                   ▼                   ▼
-   ┌─ subagent A ─┐    ┌─ subagent B ─┐    ┌─ subagent C ─┐
-   │  写登录逻辑   │    │  写注册逻辑   │    │  写测试用例  │
-   │  (deep代理)  │    │  (deep代理)  │    │  (deep代理) │
-   └──────────────┘    └──────────────┘    └──────────────┘
-                              │
-                              ▼
-              ┌─ verification-before (superpowers) ─┐
-              │   运行测试、lint、诊断               │
-              └─────────────────────────────────────┘
-                              │
-                              ▼
-                         完成交付
-```
-
-### Sisyphus 角色与 superpowers 的集成点
-
-`sisyphus.yaml` 中的 `can_delegate_to` 列表直接对应 superpowers 的子代理：
-
-```yaml
-collaboration:
-  can_delegate_to:
-    - explore          # 搜索代码库模式
-    - librarian        # 搜索外部文档/开源示例
-    - oracle            # 架构决策/高难度调试
-    - visual-engineering # UI/UX/样式
-    - deep              # 深度研究与实现
-```
-
-当使用 `/init-agent --role sisyphus` 加载角色后，Sisyphus 会自动：
-
-1. **识别任务类型** — 是探索、实现、调试还是视觉工作
-2. **选择合适的子代理** — 根据 superpowers skill 分类选择
-3. **并行分发任务** — 多个独立子任务同时执行
-4. **验证结果** — 每个子任务完成后运行验证
-5. **汇总报告** — 整合所有子代理结果向用户汇报
-
-### 启动集成工作流
+## ⚡ The Solution: One Command
 
 ```bash
-# 1. 加载 sisyphus 角色（定义 WHO）
+# Initialize your AI for architecture work:
+/init-agent --role sisyphus
+```
+
+That's it. One command, and your AI is fully configured:
+
+```
+# "I need to review this PR"     →  /init-agent --role reviewer
+# "Let's build a feature"        →  /init-agent --role developer
+# "Pair program with me"         →  /init-agent --role collaborator
+```
+
+Each role **auto-installs** the right skills, MCP servers, and plugins — and writes a ready-to-use configuration file.
+
+---
+
+## 🚀 Quick Start
+
+### Install
+
+```bash
+# As an OpenCode skill (recommended):
+npx opencode-init-agent install
+
+# Or in any project directory:
+cd your-project
+npx opencode-init-agent install
+```
+
+### Use
+
+```bash
+# See available roles:
+/init-agent --list
+# → sisyphus, developer, reviewer, collaborator
+
+# Load a role — auto-installs everything:
 /init-agent --role sisyphus
 
-# 2. superpowers skills 自动激活
-# brainstorming   → 任何 creative work 前触发
-# writing-plans    → 实现任何功能前触发
-# subagent-driven  → 并行分发任务
-# verification     → 交付前验证
+# The output:
+#   [step] Auto-installing dependencies for role 'sisyphus'...
+#   [info] Skills to load (9): brainstorming, writing-plans, ...
+#   [info] MCP servers to configure (2): playwright, context7
+#   [success] Plugin: rtk — installed
+#   [success] Agent configuration saved to sisyphus.config.md
 ```
 
-**本质上**：sisyphus.yaml 把 superpowers 的 14 个 skill 包装进了一个有 personality 的角色，让你在新 session 中以「Sisyphus 的风格」执行 superpowers 的流程规范。
+### What `--role` Does
 
-### 权限分级保障流程不被跳过
+| Action | Output |
+|--------|--------|
+| 🧠 Formats role prompt | Full agent identity with personality, rules, capabilities |
+| 📦 Lists required skills | `task(load_skills=["brainstorming", "writing-plans", ...])` |
+| 🔌 Configures MCP servers | playwright, context7, etc. |
+| ⚙️ Installs CLI plugins | rtk, node, git — auto-detected if present |
+| 📝 Writes config file | `sisyphus.config.md` with all settings |
+
+---
+
+## 🎭 Pre-Configured Roles
+
+| Role | Purpose | Skills | MCPs | Plugins |
+|------|---------|--------|------|---------|
+| **sisyphus** 🏛️ | Orchestrator — delegate, parallelize, verify | 9 | playwright, context7 | rtk, node, git, docker, python3, curl |
+| **developer** 💻 | Build features — TDD, clean code | 5 | — | — |
+| **reviewer** 🔍 | Code review — security, quality | 4 | playwright, context7 | — |
+| **collaborator** 🤝 | Pair programming — brainstorming, debugging | 3 | — | — |
+
+### Skill Layering (core → standard → all)
+
+Each role has three tiers of dependencies, so you only load what you need:
 
 ```yaml
-safety:
-  permission_levels:
-    automatic:
-      - Create todos
-      - Fire background agents
-    requires_confirmation:
-      - Write/edit files
-      - Execute build commands
-    requires_escalation:
-      - Git operations (commit, push)
+# From sisyphus.yaml — the orchestrator role:
+requires:
+  skills:
+    core: [brainstorming, writing-plans]          # ✓ Always loaded
+    standard: [subagent-driven, verification]      # ✓ Most tasks
+    all: [systematic-debugging, tdd, review-work]  # ✓ Full workflow
+  mcp:
+    core:
+      - name: playwright    # Browser automation for UI verification
+    standard:
+      - name: context7      # Documentation & OSS reference search
+  plugins:
+    core: [rtk, node, git]  # Always available
+    standard: [docker]
+    all: [python3, curl]
 ```
 
-这确保了 superpowers 的 **verification-before-completion** skill 能真正被执行——不能跳过验证就声称完成。
+---
 
-### 子代理委托 prompt 模板
+## 🏗 Architecture
 
-`roles/_prompts/` 目录为每个子代理定义了标准化的委托模板，整合了 superpowers 的流程规范。
+### Dual Layout
 
-每个模板包含四个部分：
+```mermaid
+graph TD
+    subgraph "npm Package"
+        A[package.json] --> B[bin/init-agent]
+        B -->|"npx opencode-init-agent"| C[install, --list, --role, --show, --new]
+    end
+    subgraph "OpenCode Skill"
+        D[.opencode/skills/init-agent/agent.js] -->|"Full CLI"| E[--role, --install-deps, --session, --update, --delegate]
+        D --> F[roles/]
+        F --> G[sisyphus.yaml]
+        F --> H[_templates/]
+        F --> I[_prompts/]
+    end
+```
 
-| 段落 | 内容 |
-|------|------|
-| **任务触发** | 什么场景下调用该子代理 |
-| **任务模式** | 标准化的 TASK / EXPECTED OUTCOME / MUST DO / MUST NOT DO |
-| **superpowers 规范整合** | 该场景需要遵守的 superpowers skill（如 TDD、systematic-debugging） |
-| **协作接口** | 子代理输出的标准格式及 orchestrator 如何处理 |
+**Two `agent.js` files, different purposes:**
+- `bin/init-agent` (~410 lines) — npm-published, zero dependencies, lightweight install/listing
+- `.opencode/skills/init-agent/agent.js` (~1100 lines) — full-featured, js-yaml, all commands
 
-**使用方式：**
+### Self-Evolution
+
+The system can **introspect and update itself**:
 
 ```bash
-# 生成一个委托给 deep（深度实现）的标准 prompt
-/init-agent --delegate deep "实现用户注册和登录功能"
+# See auto-generated subagent config for any role:
+/init-agent --session developer
 
-# 生成委托给 oracle（架构咨询）的标准 prompt
-/init-agent --delegate oracle "JWT vs Session 方案选型"
-
-# 列出所有可委托的子代理
-/init-agent --agents
+# Persist auto-generated definitions into the YAML file:
+/init-agent --update sisyphus
 ```
 
-**示例输出：**
+New subagents are automatically discovered and merged into existing roles — no manual YAML editing required.
+
+### Delegation Templates
+
+Generate production-ready prompts for sub-agents:
 
 ```bash
-$ /init-agent --delegate explore "搜索用户登录相关的代码实现"
+# Generate a delegation prompt for deep implementation:
+/init-agent --delegate deep "Implement user authentication with JWT"
 
-# explore: 代码库模式搜索与定位
-
-## 任务触发
-- "Find X in codebase" / "Search for Y" / "Where is Z defined"
-
-## 任务模式
-TASK: 搜索用户登录相关的代码实现
-EXPECTED OUTCOME: [文件路径列表 + 关键匹配描述]
-MUST DO:
-- 使用多个相关关键词组合搜索
-- 返回匹配的文件路径和行号
-MUST NOT DO:
-- 不要模糊搜索整库，优先缩小范围
-
-## superpowers 规范整合
-- systematic-debugging (Phase 1): 搜索前先理解问题背景
-- verification-before-completion: 搜索结果需要证据
-
-## 协作接口
-- 输出格式：表格映射（文件 → 行号 → 匹配内容 → 用途）
-- 交付给 orchestrator 后：Sisyphus 根据路径理解模块分布
+# Generate a delegation prompt for codebase exploration:
+/init-agent --delegate explore "Find auth middleware patterns"
 ```
 
-每个模板生成的 prompt 包含了该子代理的职责定义、任务场景、superpowers 规范约束，以及或chestrator 如何处理输出的协作接口定义。
+---
+
+## 📋 All Commands
+
+```bash
+# Role Management
+/init-agent --list                          # List all roles
+/init-agent --role <name>                   # Load role + auto-install deps
+/init-agent --show <name>                   # Display role YAML
+/init-agent --new <name>                    # Create role (smart analysis)
+
+# Dependency Management
+/init-agent --install-deps <name>           # Install skills, MCPs, plugins
+
+# Session & Evolution
+/init-agent --session [role]                # Session snapshot with auto-config
+/init-agent --update [role]                 # Save auto-definitions to YAML
+
+# Delegation
+/init-agent --agents                        # List available sub-agents
+/init-agent --delegate <agent> <scenario>   # Generate delegation prompt
+
+# Installation
+npx opencode-init-agent install             # Install as OpenCode skill
+```
+
+---
+
+## 🎨 Creating Custom Roles
+
+```bash
+# Smart creation — detects role type from name:
+/init-agent --new security-auditor
+# → Detected: Security Researcher
+# → Generates role with appropriate traits and capabilities
+
+# Interactive mode — full control:
+/init-agent --new my-role --interactive
+# → Prompts for title, traits, capabilities
+```
+
+Or write a YAML file directly using the templates:
+
+```bash
+# Start from the developer template
+cp .opencode/skills/init-agent/roles/_templates/developer.yaml my-role.yaml
+# Edit to match your needs
+```
+
+---
+
+## 🔧 How Dependency Installation Works
+
+| Dependency Type | Install Strategy | Example |
+|----------------|-----------------|---------|
+| **Skills** | Printed as `task(load_skills=[...])` | Requires OpenCode runtime |
+| **MCP Servers** | Listed with descriptions | Requires OpenCode configuration |
+| **npm Plugins** | `npm install -g <name>` | rtk |
+| **System Tools** | Detected via `which`, skipped if absent | docker, python3, curl |
+
+```bash
+$ /init-agent --install-deps sisyphus
+[step] Installing dependencies for role 'sisyphus'...
+[info] Skills to load: 9
+  skill: brainstorming — use task(load_skills=["brainstorming"], ...)
+  skill: writing-plans — use task(load_skills=["writing-plans"], ...)
+  ...
+[info] Plugins to install: 6
+  plugin: rtk — installed
+  plugin: node — installed
+  plugin: docker — manual install required (e.g. apt install docker)
+```
+
+---
+
+## 🤝 Superpowers Integration
+
+init-agent works with [Superpowers](https://github.com/obra/superpowers) to form a complete **WHO + HOW** workflow:
+
+| Skill | Role |
+|-------|------|
+| **init-agent** | **WHO** — defines agent personality, capabilities, role |
+| **superpowers** | **HOW** — provides workflow: brainstorm → plan → execute → verify |
+
+```bash
+# Full workflow:
+/init-agent --role sisyphus     # Set WHO you are
+# → Sisyphus then uses superpowers skills:
+# → brainstorming, writing-plans, subagent-driven, verification
+```
+
+---
+
+## 📄 License & Links
+
+- **Repository**: [github.com/fifaliao/smartAgent](https://github.com/fifaliao/smartAgent)
+- **npm**: `npx opencode-init-agent`
+- **License**: MIT
+
+---
+
+<p align="center">
+  <b>One command. Full setup. Zero repetition.</b><br>
+  <i>给你的 AI 一个开箱即用的角色初始化方案。</i>
+</p>
