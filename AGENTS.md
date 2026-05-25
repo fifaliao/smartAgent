@@ -88,10 +88,14 @@ requires:
     core:
       - name: playwright
         description: Browser automation
+  plugins:
+    core: [rtk, node, git]                        # Always installed
+    standard: [docker]                            # Most tasks
+    all: [python3, curl]                          # Full workflow
 ```
 
-- `--role <name>` auto-installs dependencies and generates a `<name>.config.md` agent configuration file
-- `--install-deps [role]` lists all required skills/MCPs and generates config without loading the role
+- `--role <name>` auto-installs dependencies (skills, MCPs, plugins) and generates a `<name>.config.md` agent configuration file
+- `--install-deps [role]` lists all required skills/MCPs/plugins and generates config without loading the role
 - Tool layering (core/standard/all) follows claude-task-master's approach — load only what you need
 
 ## Self-evolution mechanism
