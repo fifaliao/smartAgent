@@ -86,6 +86,15 @@ memory:
     - Your preferences and working style
     - Decisions we've made together
 
+requires:
+  skills:
+    core:
+      - brainstorming
+    standard:
+      - systematic-debugging
+    all:
+      - requesting-code-review
+
 collaboration:
   can_delegate_to:
     - reviewer

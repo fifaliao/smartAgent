@@ -94,6 +94,32 @@ collaboration:
     - deep
   communicates_via: structured_messages
   escalation_path: human_supervisor
+
+# Required skills and MCP servers for this role.
+# When init-agent --role is invoked these are auto-installed/configured.
+# Tool layering: core = always loaded, standard = most tasks, all = full workflow.
+requires:
+  skills:
+    core:
+      - brainstorming
+      - writing-plans
+    standard:
+      - subagent-driven-development
+      - verification-before-completion
+      - requesting-code-review
+    all:
+      - systematic-debugging
+      - test-driven-development
+      - dispatching-parallel-agents
+      - finishing-a-development-branch
+  mcp:
+    core:
+      - name: playwright
+        description: Browser automation for frontend verification
+    standard:
+      - name: context7
+        description: Documentation and OSS reference search
+
 subagent_definitions:
   explore:
     type: explore

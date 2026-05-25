@@ -80,6 +80,22 @@ safety:
     requires_escalation:
       - Report critical security vulnerabilities (must flag prominently)
 
+requires:
+  skills:
+    core:
+      - requesting-code-review
+    standard:
+      - verification-before-completion
+      - systematic-debugging
+    all:
+      - finishing-a-development-branch
+  mcp:
+    core:
+      - name: playwright
+        description: Browser automation for UI review
+      - name: context7
+        description: Documentation verification during review
+
 output_rules:
   personality_isolation: true
   formal_output_tones:

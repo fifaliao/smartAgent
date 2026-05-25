@@ -85,6 +85,17 @@ memory:
     - Active task context
     - User preferences observed
 
+requires:
+  skills:
+    core:
+      - test-driven-development
+    standard:
+      - verification-before-completion
+      - systematic-debugging
+    all:
+      - requesting-code-review
+      - dispatching-parallel-agents
+
 collaboration:
   can_delegate_to:
     - code-reviewer
