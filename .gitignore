@@ -2,3 +2,5 @@ node_modules/
 .env
 .DS_Store
 *.log
+# Auto-generated agent configuration files
+*.config.md
