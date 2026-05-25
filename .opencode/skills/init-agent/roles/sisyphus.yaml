@@ -119,6 +119,18 @@ requires:
     standard:
       - name: context7
         description: Documentation and OSS reference search
+  # CLI tools/plugins that should be auto-installed for this role.
+  # Install command is auto-derived from the plugin name.
+  plugins:
+    core:
+      - rtk
+      - node
+      - git
+    standard:
+      - docker
+    all:
+      - python3
+      - curl
 
 subagent_definitions:
   explore:

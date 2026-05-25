@@ -333,6 +333,49 @@ function getRequiredSkills(role) {
   return [...new Set(skills)];
 }
 
+// Collect all plugin/tool names from role.requires.plugins across all tiers.
+function getRequiredPlugins(role) {
+  const plugins = [];
+  if (!role.requires || !role.requires.plugins) return plugins;
+  const tiers = ['core', 'standard', 'all'];
+  for (const tier of tiers) {
+    if (role.requires.plugins[tier]) {
+      plugins.push(...role.requires.plugins[tier]);
+    }
+  }
+  return [...new Set(plugins)];
+}
+
+// Try to install a plugin/tool. Works for common package managers.
+function installPlugin(name) {
+  if (!name || name === 'node' || name === 'git') {
+    // These are assumed present; skip.
+    return true;
+  }
+  const cmds = {
+    rtk:   'npm install -g rtk',
+    npm:   'npm install -g npm',
+    python3: 'which python3 || apt-get install -y python3',
+    curl:  'which curl || apt-get install -y curl',
+    docker: 'which docker || curl -fsSL https://get.docker.com | sh',
+  };
+  if (cmds[name]) {
+    try {
+      require('child_process').execSync(cmds[name], { stdio: 'pipe', timeout: 60000 });
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+  // Generic fallback: try npm global install.
+  try {
+    require('child_process').execSync(`npm install -g ${name} 2>/dev/null`, { stdio: 'pipe', timeout: 60000 });
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
 // Collect all MCP names from role.requires.mcp across all tiers.
 function getRequiredMcp(role) {
   const mcps = [];
@@ -350,7 +393,7 @@ function getRequiredMcp(role) {
 function formatRoleRequirements(role) {
   const lines = [];
   if (!role.requires) return '';
-  const { skills, mcp } = role.requires;
+  const { skills, mcp, plugins } = role.requires;
   if (skills) {
     lines.push('### Skills');
     if (skills.core && skills.core.length) lines.push(`- **Core:** ${skills.core.join(', ')}`);
@@ -363,6 +406,14 @@ function formatRoleRequirements(role) {
       if (mcp[tier] && mcp[tier].length) {
         const names = mcp[tier].map(m => m.name || m).join(', ');
         lines.push(`- **${tier.charAt(0).toUpperCase() + tier.slice(1)}:** ${names}`);
+      }
+    }
+  }
+  if (plugins) {
+    lines.push('### Plugins / Tools');
+    for (const tier of ['core', 'standard', 'all']) {
+      if (plugins[tier] && plugins[tier].length) {
+        lines.push(`- **${tier.charAt(0).toUpperCase() + tier.slice(1)}:** ${plugins[tier].join(', ')}`);
       }
     }
   }
@@ -387,6 +438,11 @@ function generateAgentConfig(roleName, role) {
   if (mcps.length) {
     const mcpNames = mcps.map(m => m.name || m).join(', ');
     config += `**MCP Servers:** ${mcpNames}\n`;
+  }
+  const plugins = getRequiredPlugins(role);
+  if (plugins.length) {
+    config += `**Plugins:** ${plugins.join(', ')}\n`;
+    config += `**Install command:** npx opencode-init-agent --install-deps ${roleName}\n`;
   }
   config += '\n---\n';
   return config;
