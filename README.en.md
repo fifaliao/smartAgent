@@ -220,6 +220,20 @@ npx opencode-init-agent install             # Install as OpenCode skill
 # → Prompts for title, traits, capabilities
 ```
 
+### Auto-Injected Behavioral Guidelines
+
+When creating a new role, the system automatically appends behavioral guidelines (from [Andrej Karpathy's CLAUDE.md](https://github.com/multica-ai/andrej-karpathy-skills)) to the project's `AGENTS.md`. Four principles: **Think Before Coding, Simplicity First, Surgical Changes, Goal-Driven Execution**.
+
+```bash
+/init-agent --new my-role
+# [success] Role 'my-role' created at roles/my-role.yaml
+# [success] Behavioral guidelines appended to AGENTS.md
+
+# Subsequent creations skip duplicates automatically:
+/init-agent --new another-role
+# [info] Behavioral guidelines already present in AGENTS.md, skipping.
+```
+
 Or write a YAML file directly using the templates:
 
 ```bash

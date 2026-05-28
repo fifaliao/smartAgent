@@ -220,6 +220,20 @@ npx opencode-init-agent install             # 作为 OpenCode 技能安装
 # → 提示输入标题、特质、能力
 ```
 
+### 自动注入行为准则
+
+创建新角色时，系统会自动将行为准则（源自 [Andrej Karpathy 的 CLAUDE.md](https://github.com/multica-ai/andrej-karpathy-skills)）追加到项目根目录的 `AGENTS.md`，包含四大准则：**先思考再编码、简洁优先、手术式修改、目标驱动执行**。
+
+```bash
+/init-agent --new my-role
+# [success] Role 'my-role' created at roles/my-role.yaml
+# [success] Behavioral guidelines appended to AGENTS.md
+
+# 再次创建不会重复追加（自动去重）：
+/init-agent --new another-role
+# [info] Behavioral guidelines already present in AGENTS.md, skipping.
+```
+
 或直接使用模板编写 YAML 文件：
 
 ```bash
