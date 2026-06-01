@@ -1,19 +1,35 @@
 {
   "name": "opencode-init-agent",
-  "version": "1.0.0",
-  "description": "Role-based agent initialization for OpenCode",
+  "version": "1.0.1",
+  "description": "Role-based agent initialization for OpenCode — full-featured CLI with role creation, dependency management, and delegation prompts",
   "bin": {
     "init-agent": "./bin/init-agent"
   },
   "scripts": {
     "install-skill": "node bin/init-agent install"
   },
-  "keywords": ["opencode", "agent", "role", "skill"],
+  "keywords": [
+    "opencode",
+    "agent",
+    "role",
+    "skill",
+    "init-agent"
+  ],
   "repository": {
     "type": "git",
     "url": "https://github.com/fifaliao/smartAgent"
   },
   "engines": {
     "node": ">=14.0.0"
-  }
+  },
+  "dependencies": {
+    "js-yaml": "^4.2.0"
+  },
+  "files": [
+    "bin/",
+    "lib/",
+    "roles/",
+    "SKILL.md",
+    "package.json"
+  ]
 }
